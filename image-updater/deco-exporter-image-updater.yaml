@@ -1,0 +1,21 @@
+apiVersion: argocd-image-updater.argoproj.io/v1alpha1
+kind: ImageUpdater
+metadata:
+  name: deco-exporter-iu
+spec:
+  applicationRefs:
+  - namePattern: deco-exporter
+    images:
+    - alias: deco-exporter
+      imageName: harbor.sirddail.net/ai/deco-exporter
+      commonUpdateSettings:
+        allowTags: regexp:^[0-9]+\.[0-9]+\.[0-9]+$
+        updateStrategy: semver
+        pullSecret: pullsecret:deco-exporter/deco-exporter-harbor-pull
+        forceUpdate: false
+    writeBackConfig:
+      method: git
+      gitConfig:
+        repository: https://github.com/dvystrcil/deco-exporter.git
+        branch: main
+        writeBackTarget: kustomization:/overlays
