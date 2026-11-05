@@ -1,0 +1,109 @@
+# deco-exporter — per-client traffic from the main Deco (BE85) into
+# Prometheus (homelab#1931).
+#
+# Generated from bin/onboard-new-app.py (D-016), then fitted to what this is:
+# a single-threaded poller that writes nothing to disk.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: deco-exporter
+  namespace: deco-exporter
+  labels:
+    app: deco-exporter
+    app.kubernetes.io/name: deco-exporter
+  annotations:
+    # D-013: consumes two Infisical-managed Secrets (the Harbor pull secret
+    # and the Deco password), so the workload carries the reloader
+    # annotation — a rotated Deco password must restart the pod.
+    reloader.stakater.com/auto: "true"
+spec:
+  # Exactly one: each replica would poll the router on its own, doubling the
+  # load AC2 measured, and the Deco allows a single admin session.
+  replicas: 1
+  strategy:
+    # No overlap during a rollout, for the same single-session reason.
+    type: Recreate
+  selector:
+    matchLabels:
+      app: deco-exporter
+  template:
+    metadata:
+      labels:
+        app: deco-exporter
+        app.kubernetes.io/name: deco-exporter
+    spec:
+      imagePullSecrets:
+      - name: deco-exporter-harbor-pull
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: deco-exporter
+        image: harbor.sirddail.net/ai/deco-exporter:0.0.1
+        ports:
+        - containerPort: 9850
+          name: metrics
+        env:
+        - name: DECO_HOST
+          value: http://192.168.86.1
+        - name: DECO_POLL_INTERVAL_SECONDS
+          value: "60"
+        # AC8: device_list is the call reported to interrupt wireless
+        # backhaul. Stays "false" until an AC2-style side-by-side measurement
+        # shows it doesn't hurt MAIN<->CORE RTT or loss.
+        - name: DECO_MESH_STATS_ENABLED
+          value: "false"
+        # From the Secret, never argv (argv is world-readable in /proc).
+        - name: DECO_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: deco-exporter-password
+              key: DECO_PASSWORD
+        # Sized from a measurement, not the scaffold's generic 256Mi/512Mi:
+        # the image's peak RSS (VmHWM) was 43 MiB over 40 s of polling and 20
+        # scrapes, run locally under --read-only as uid 1000. That run could
+        # not reach a router, so the real path (RSA/AES login, a 41-client
+        # list) is not in it; the limit leaves 3x headroom for that. The VPA
+        # (updateMode Off, D-012) gives a 7-day peak to re-size from (D-022).
+        resources:
+          requests:
+            memory: 64Mi
+            cpu: 10m
+          limits:
+            memory: 128Mi
+        # /healthz is process liveness only. Router reachability is
+        # deco_scrape_success, alerted on in Prometheus: a router outage must
+        # not crash-loop the pod that reports it.
+        startupProbe:
+          httpGet:
+            path: /healthz
+            port: metrics
+          failureThreshold: 15
+          periodSeconds: 2
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: metrics
+          periodSeconds: 30
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: metrics
+          periodSeconds: 60
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+          runAsGroup: 1000
+          # Nothing is written at runtime (PYTHONDONTWRITEBYTECODE is set in
+          # the image), so no /tmp mount — the smoke test runs the image with
+          # --read-only and no tmpfs.
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL

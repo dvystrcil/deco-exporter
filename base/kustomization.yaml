@@ -1,0 +1,12 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: deco-exporter
+resources:
+  - namespace.yaml
+  - harbor-pull-secret.yaml
+  - deco-password-secret.yaml
+  - deployment.yaml
+  - service.yaml
+  - servicemonitor.yaml
+  - image-updater-rbac.yaml
+  - vpa.yaml

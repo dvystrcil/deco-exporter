@@ -1,0 +1,20 @@
+# Picked up by monitoring/prometheus-kube-prometheus-prometheus, whose
+# serviceMonitorSelector is release=prometheus (any namespace).
+#
+# The scrape interval does NOT set the router's load: the exporter polls the
+# Deco on its own DECO_POLL_INTERVAL_SECONDS and a scrape only reads the last
+# result. 60s matches that interval, so each poll is seen once.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: deco-exporter
+  namespace: deco-exporter
+  labels:
+    release: prometheus
+spec:
+  endpoints:
+  - port: metrics
+    interval: 60s
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: deco-exporter
