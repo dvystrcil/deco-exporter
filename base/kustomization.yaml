@@ -8,5 +8,4 @@ resources:
   - deployment.yaml
   - service.yaml
   - servicemonitor.yaml
-  - image-updater-rbac.yaml
   - vpa.yaml
